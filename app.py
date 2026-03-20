@@ -12,7 +12,7 @@ GENAI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GENAI_API_KEY:
     genai.configure(api_key=GENAI_API_KEY)
     # 研究の文脈に合わせて最新モデルを指定
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     st.error("APIキーが見つかりません。環境変数 'GEMINI_API_KEY' を設定してください。")
 
