@@ -5,30 +5,26 @@ import matplotlib.pyplot as plt
 from scipy.stats import chisquare
 import google.generativeai as genai
 import os
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-# --- 1. APIの設定（無料プラン対応版） ---
+# --- 1. APIの設定（404/429エラー対策版） ---
 GENAI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if GENAI_API_KEY:
     genai.configure(api_key=GENAI_API_KEY)
     
-    # 利用可能なモデルを動的に取得し、最適なものを選択するロジック
     try:
-        # 実際にそのキーで「今」使えるモデルをリストアップ
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # 無料枠で通りやすい順に検索（models/ をつけるのがコツ）
-        candidates = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
-        target_model = next((c for c in candidates if c in available_models), None)
-        
-        if target_model:
-            model = genai.GenerativeModel(target_model)
-        else:
-            # 最終手段：直接指定（1.5-flashは無料枠の標準です）
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
+        # 無料枠で最も安定する指定方法（models/を明記）
+        # 不正シナリオ生成時にブロックされないよう安全設定を調整 
+        model = genai.GenerativeModel(
+            model_name='models/gemini-1.5-flash',
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
+        )
+        # 接続確認用のダミー呼び出しは行わず、実行時エラーハンドリングに任せる
     except Exception as e:
-        st.error(f"モデルリストの取得に失敗しました。標準設定で続行します。: {e}")
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        st.error(f"モデルの初期化に失敗しました。: {e}")
 else:
     st.error("APIキーが見つかりません。環境変数 'GEMINI_API_KEY' を設定してください。")
 
@@ -43,7 +39,7 @@ if st.sidebar.button("デモ用データを生成"):
     np.random.seed(42)
     # 正常データ：対数分布に従う数値
     normal_data = 10 ** np.random.uniform(2, 6, 2000)
-    # 異常データ：特定の数字から始まる不自然な塊（研究用のシミュレーション）
+    # 異常データ：特定の数字（5, 8など）から始まる不自然な塊（研究用） [cite: 20]
     fraud_data = np.random.choice([500, 520, 550, 580], size=300)
     data = np.concatenate([normal_data, fraud_data])
     df_demo = pd.DataFrame({"amount": data})
@@ -74,14 +70,14 @@ if 'data' in st.session_state:
         digits = np.arange(1, 10)
         observed_counts = observed_counts.reindex(digits, fill_value=0)
         
-        # ベンフォードの法則の理論分布
+        # ベンフォードの法則の理論分布 [cite: 44]
         benford_dist = np.log10(1 + 1/digits)
         expected_counts = benford_dist * observed_counts.sum()
         
         # カイ二乗検定
         chi_stat, p_value = chisquare(f_obs=observed_counts, f_exp=expected_counts)
 
-        # --- 解析結果表示（研究思想に基づき断定を避ける表現へ修正 ） ---
+        # --- 解析結果表示（研究思想：検知と判断の分離 [cite: 62]） ---
         st.subheader("2. 統計的解析結果")
         col1, col2, col3 = st.columns(3)
         col1.metric("カイ二乗統計量", f"{chi_stat:.2f}")
@@ -89,7 +85,7 @@ if 'data' in st.session_state:
         
         if p_value < 0.05:
             col3.warning("有意な逸脱を確認")
-            st.warning("【分析結果】統計的な分布の偏りが確認されました。これは直ちに不正を示すものではなく、背景にある業務プロセスを精査する必要があります。")
+            st.warning("【分析結果】統計的な分布の偏りが確認されました。これは直ちに不正を示すものではなく [cite: 8, 76]、背景にある業務プロセスを精査する必要があります。")
         else:
             col3.success("有意な逸脱なし")
             st.info("【分析結果】データは統計的に自然な分布の範囲内です。")
@@ -104,12 +100,12 @@ if 'data' in st.session_state:
         ax.legend()
         st.pyplot(fig)
 
-        # --- 6. AIによる理解支援（ここが研究の核となる部分 [cite: 18, 67]） ---
+        # --- 6. AIによる理解支援（研究思想：LLMによる解釈支援 [cite: 21, 67]） ---
         if p_value < 0.05 and GENAI_API_KEY:
             st.divider()
             st.subheader("4. 調査仮説の構築支援（LLM）")
             st.markdown("""
-            ベンフォード分析を「違和感センサー」として用い[cite: 20]、LLMを違和感の解釈と調査仮説整理に限定して活用します[cite: 21]。
+            ベンフォード分析を「違和感センサー」として用い [cite: 20]、LLMを違和感の解釈と調査仮説整理に限定して活用します [cite: 21]。
             """)
             
             # 最も乖離している桁を特定
@@ -117,7 +113,7 @@ if 'data' in st.session_state:
             max_diff_digit = diffs.idxmax()
             
             if st.button("AIによる調査仮説の整理を実行"):
-                # 不正を断定しない、理解支援のためのプロンプト設計 [cite: 67-72]
+                # 不正を断定しない、理解支援のためのプロンプト設計 [cite: 68-72, 78]
                 prompt = f"""
 あなたは熟練した会計監査人の思考補助アシスタントです。
 以下の統計解析結果に基づき、調査者の「理解支援」に特化した情報を整理してください。
@@ -126,15 +122,16 @@ if 'data' in st.session_state:
 - p値: {p_value:.8f}（有意な逸脱あり）
 - 最も乖離が大きい桁: {max_diff_digit}
 
-以下の4項目を「不正を断定しない表現」で出力してください：
-1. **統計的解釈**: どの数値にどのような偏りがあるかの要約。
-2. **正当な業務上の仮説**: 歪みが生じる妥当なビジネス上の理由。
-3. **潜在的なリスクシナリオ**: 注意すべき不正のパターン。
-4. **推奨される調査アクション**: 次に確認すべき具体的な証憑や確認項目。
+以下の4項目を「不正を断定しない表現」で出力してください [cite: 78]：
+1. **統計的解釈**: どの数値にどのような偏りがあるかの客観的な要約。
+2. **正当な業務上の仮説**: 歪みが生じる妥当なビジネス上の理由（例：特定単価、端数処理） 。
+3. **潜在的なリスクシナリオ**: 注意すべき不正のパターン（例：承認回避の分割発注） 。
+4. **推奨される調査アクション**: 次に確認すべき具体的な証憑や確認項目 [cite: 71]。
 """
                 
                 with st.spinner("熟練監査人の視点で分析中..."):
                     try:
+                        # 404/429エラーを想定したエラーハンドリング
                         response = model.generate_content(prompt)
                         st.markdown("### AIによる分析レポート")
                         st.write(response.text)
@@ -144,7 +141,7 @@ if 'data' in st.session_state:
                         st.radio("このAIの説明は、調査方針の決定に役立ちそうですか？（研究評価用）", 
                                  ["非常に役立つ", "役立つ", "どちらとも言えない", "あまり役立たない"])
                     except Exception as e:
-                        st.error(f"AIの呼び出しでエラーが発生しました。APIキーのクォータ（無料枠）を確認してください: {e}")
+                        st.error(f"AIの呼び出しでエラーが発生しました。コード実行環境のAPIキー設定やクォータを確認してください。: {e}")
         elif p_value < 0.05:
             st.info("※APIキーが設定されていないため、AI解説機能は利用できません。")
             
