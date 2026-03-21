@@ -2,15 +2,24 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 from scipy.stats import chisquare
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import os
 
+# --- 0. 日本語フォント設定（文字化け対策） ---
+# ipaexg.ttf が streamlit_app.py と同じフォルダにある前提
+FONT_PATH = os.path.join(os.path.dirname(__file__), 'ipaexg.ttf')
 
-plt.rcParams['font.family'] = 'sans-serif' # sans-serifを指定
-plt.rcParams['font.sans-serif'] = ['IPAexGothic', 'Noto Sans CJK JP'] # 日本語フォントを優先順位つきで指定
-
-plt.rcParams['axes.unicode_minus'] = False
+if os.path.exists(FONT_PATH):
+    jp_font = fm.FontProperties(fname=FONT_PATH)
+    # Matplotlibのグローバル設定に反映
+    plt.rcParams['font.family'] = jp_font.get_name()
+    plt.rcParams['axes.unicode_minus'] = False
+else:
+    st.error(f"フォントファイルが見つかりません。GitHubに ipaexg.ttf をアップロードしてください。パス: {FONT_PATH}")
+    jp_font = None
 
 # --- 1. APIの設定 ---
 if "GEMINI_API_KEY" in st.secrets:
@@ -37,20 +46,20 @@ model = get_model(GENAI_API_KEY)
 
 # --- 2. アプリの基本設定 ---
 st.set_page_config(page_title="会計不正検知支援ツール", layout="wide")
-st.title("会計データ解析：ベンフォードの法則による異常検知システム")
+st.title("📊 会計データ解析：ベンフォードの法則による異常検知システム")
 st.markdown("---")
 
 # --- 3. サイドバー：データ管理 ---
 st.sidebar.header("データ管理")
 uploaded_file = st.sidebar.file_uploader("解析用CSVアップロード", type="csv")
 
-if st.sidebar.button("デモ用データを生成"):
+if st.sidebar.button("🧪 デモ用データを生成"):
     np.random.seed(42)
     normal_data = 10 ** np.random.uniform(2, 6, 2000)
     fraud_data = np.random.choice([500, 520, 550, 580], size=300)
     data = np.concatenate([normal_data, fraud_data])
     st.session_state['data'] = pd.DataFrame({"amount": data})
-    st.sidebar.success("デモデータを生成しました。")
+    st.sidebar.success("デモデータをロードしました。")
 
 if uploaded_file:
     st.session_state['data'] = pd.read_csv(uploaded_file)
@@ -63,7 +72,7 @@ if 'data' in st.session_state:
         st.error("CSVに 'amount' カラムが必要です。")
         st.stop()
 
-    # データクレンジング
+    # データクレンジングと第1桁抽出
     amounts = df["amount"].astype(str).str.replace(r'[^0-9.]', '', regex=True)
     first_digits = amounts.str.lstrip("0").str[0]
     first_digits = first_digits[first_digits.str.isdigit() == True].astype(int)
@@ -79,8 +88,8 @@ if 'data' in st.session_state:
     diffs = (observed_counts / count) - benford_dist
     max_diff_digit = diffs.idxmax()
 
-    # タブ構成によるUIの整理
-    tab1, tab2, tab3, tab4 = st.tabs(["解析サマリー", "統計詳細", "AI調査仮説", "対象データ確認"])
+    # タブ構成
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 解析サマリー", "📈 統計詳細", "🧠 AI調査仮説", "🔎 対象データ確認"])
 
     with tab1:
         st.subheader("解析サマリー")
@@ -94,19 +103,22 @@ if 'data' in st.session_state:
         else:
             c3.success("有意な逸脱なし")
 
-        # グラフ
+        # グラフ描画
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.bar(range(1, 10), observed_counts / count, alpha=0.4, label='観測分布', color='gray')
         ax.plot(range(1, 10), benford_dist, marker='o', color='red', label='理論分布', linewidth=2)
-        ax.set_xlabel("第1桁の数字")
-        ax.set_ylabel("出現確率")
-        ax.legend()
+        
+        # フォントが読み込めている場合は日本語を適用
+        font_prop = jp_font if jp_font else None
+        ax.set_xlabel("第1桁の数字", fontproperties=font_prop)
+        ax.set_ylabel("出現確率", fontproperties=font_prop)
+        ax.legend(prop=font_prop)
+        
         st.pyplot(fig)
 
     with tab2:
         st.subheader("統計量詳細")
         col_stats1, col_stats2 = st.columns(2)
-        
         with col_stats1:
             st.write("各桁の出現回数と理論値との比較")
             stats_df = pd.DataFrame({
@@ -115,7 +127,6 @@ if 'data' in st.session_state:
                 "乖離（％）": (diffs * 100).round(2)
             })
             st.table(stats_df)
-        
         with col_stats2:
             st.write("基本統計量（amount）")
             st.write(df["amount"].describe())
@@ -124,21 +135,14 @@ if 'data' in st.session_state:
         st.subheader("AIによる調査仮説の構築")
         if p_value < 0.05 and model:
             prompt = f"""
-あなたは熟練した公認会計士および監査法人のシニアマネージャーです。
-以下のベンフォード分析の結果に基づき、専門的な監査上の解釈を述べてください。
-
-【分析結果】
+あなたは熟練した公認会計士です。以下のベンフォード分析結果に基づき専門的な監査レポートを日本語で作成してください。
 - 総件数: {count}
 - p値: {p_value:.8f}
 - 最も乖離が激しい桁: {max_diff_digit}
 
-以下の4項目について、実務的かつ論理的に日本語で出力してください。
-1. 統計的解釈: この偏りが監査上どのような意味を持つか。
-2. 業務上の背景予測: どのような業務プロセス（支払サイクル、価格設定等）がこの偏りを生む可能性があるか。
-3. 具体的なリスクシナリオ: どのような不正（分割発注、架空計上等）を想定すべきか。
-4. 推奨される詳細調査手続: どの証憑（請求書、承認ルート等）を重点的に確認すべきか。
+1.統計的解釈 2.業務上の背景予測 3.リスクシナリオ 4.推奨される詳細調査手続 を出力してください。
 """
-            @st.cache_data(show_spinner="AIが監査シナリオを生成中...")
+            @st.cache_data(show_spinner="AI分析中...")
             def generate_report(_model, _prompt):
                 return _model.generate_content(_prompt).text
 
@@ -148,14 +152,13 @@ if 'data' in st.session_state:
             except Exception as e:
                 st.error(f"AI実行エラー: {e}")
         else:
-            st.info("統計的な有意差が認められないため、AI分析はスキップされました。")
+            st.info("有意な差がないためAI分析は不要です。")
 
     with tab4:
         st.subheader(f"重点調査対象：第1桁が「{max_diff_digit}」のデータ")
-        # 実際に乖離している桁のデータだけを抽出して表示
         suspicious_data = df[df["amount"].astype(str).str.replace(r'[^0-9.]', '', regex=True).str.lstrip("0").str.startswith(str(max_diff_digit))]
         st.write(f"該当件数: {len(suspicious_data)} 件")
         st.dataframe(suspicious_data, use_container_width=True)
 
 else:
-    st.info("左側のサイドバーからCSVファイルをアップロードするか、デモデータを生成してください。")
+    st.info("サイドバーからCSVをアップロードするか、デモデータを生成してください。")
