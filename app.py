@@ -19,9 +19,8 @@ def get_model(api_key):
     """モデルの初期化を1回だけに限定し、有料枠の効率を高めます"""
     try:
         genai.configure(api_key=api_key)
-        # 課金プランでは 2.0-flash がコスパ・速度ともに最強です
         return genai.GenerativeModel(
-            model_name='gemini-2.0-flash',
+            model_name='gemini-2.5-flash',
             safety_settings={
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             }
