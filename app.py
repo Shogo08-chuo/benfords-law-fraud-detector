@@ -6,6 +6,12 @@ from scipy.stats import chisquare
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
+
+plt.rcParams['font.family'] = 'sans-serif' # sans-serifを指定
+plt.rcParams['font.sans-serif'] = ['IPAexGothic', 'Noto Sans CJK JP'] # 日本語フォントを優先順位つきで指定
+
+plt.rcParams['axes.unicode_minus'] = False
+
 # --- 1. APIの設定 ---
 if "GEMINI_API_KEY" in st.secrets:
     GENAI_API_KEY = st.secrets["GEMINI_API_KEY"]
