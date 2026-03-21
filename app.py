@@ -171,40 +171,40 @@ if 'data' in st.session_state:
 
     with tab4:
         st.subheader("📝 研究用：仮説検証アンケート (自動保存)")
-        st.markdown("調査終了後、以下のフォームに回答してください。データはスプレッドシートに直接保存されます。")
+        st.markdown("送信に失敗する場合、下に表示されるエラー内容を教えてください。")
         
         with st.form("evaluation_form"):
-            q1 = st.slider("【H1】LLMの説明により、調査すべき箇所が明確になりましたか？ (1:全く思わない - 5:強く思う)", 1, 5, 3)
-            q2 = st.slider("【H2】LLMの説明により、自分が思いつかなかった新しい仮説に気づけましたか？", 1, 5, 3)
-            q4 = st.slider("【H4】LLMの出力内容は、調査の裏付けとして信頼できると感じましたか？", 1, 5, 3)
-            submitted = st.form_submit_button("評価データを記録")
+            q1 = st.slider("【H1】着目箇所が明確になった", 1, 5, 3)
+            q2 = st.slider("【H2】新しい仮説に気づけた", 1, 5, 3)
+            q4 = st.slider("【H4】LLMの出力は信頼できる", 1, 5, 3)
+            submitted = st.form_submit_button("データをスプレッドシートに保存")
             
             if submitted:
-                # viewform を formResponse に書き換えた本番用URL
-                GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdcoEXhmPpXKZLSiOVruvNKOp-LHGjLgJ9zsXrpwrZl-7mrqA/formResponse"
+                # 【チェック1】末尾が "formResponse" になっているか確認してください
+                G_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdcoEXhmPpXKZLSiOVruvNKOp-LHGjLgJ9zsXrpwrZl-7mrqA/formResponse"
                 
-                # サイドバーの計測時間を取得（計測していなければ0秒）
                 elapsed = st.session_state.get('elapsed_time')
                 final_time = round(elapsed, 1) if elapsed else 0
                 
-                # 抽出したIDを正確にマッピング
-                form_data = {
-                    "entry.437199155": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # 回答日時
-                    "entry.1611883943": tone_mode,                                    # 提示スタイル
-                    "entry.1286271892": q1,                                           # H1_一致度
-                    "entry.1797515403": q2,                                           # H2_多様性
-                    "entry.690738940": final_time,                                    # H3_所要時間
-                    "entry.472723159": q4                                             # H4_信頼性
+                # 【チェック2】IDが 437199155 などの数字と一致しているか
+                payload = {
+                    "entry.437199155": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                    "entry.1611883943": str(tone_mode),
+                    "entry.1286271892": str(q1),
+                    "entry.1797515403": str(q2),
+                    "entry.690738940": str(final_time),
+                    "entry.472723159": str(q4)
                 }
                 
                 try:
-                    # スプレッドシートへデータ送信
-                    response = requests.post(GOOGLE_FORM_URL, data=form_data)
-                    if response.status_code == 200:
-                        st.success(f"🎉 記録完了！スプレッドシートに安全に保存されました。(記録された所要時間: {final_time}秒)")
+                    res = requests.post(G_URL, data=payload)
+                    if res.status_code == 200:
+                        st.success("🎉 大成功！スプレッドシートに反映されました。")
                     else:
-                        st.error("⚠️ 送信に失敗しました。フォームの設定を確認してください。")
+                        st.error(f"⚠️ 送信失敗 (エラーコード: {res.status_code})")
+                        # 400が出る場合はIDの間違い、403や405はURLの間違いが多いです
+                        st.write("--- デバッグ情報 (ここを教えてください) ---")
+                        st.write(f"URL: {G_URL}")
+                        st.write("サーバーからの返答:", res.text[:300]) 
                 except Exception as e:
-                    st.error(f"⚠️ 通信エラーが発生しました: {e}")
-else:
-    st.info("👈 サイドバーからCSVをアップロードするか、デモデータを生成してください。")
+                    st.error(f"通信エラー: {e}")
