@@ -117,7 +117,7 @@ if 'data' in st.session_state:
             diffs = (observed_counts / total_count) - benford_ratios
             max_diff_digit = diffs.idxmax()
             
-            # --- 役割とトーンの制御 ---
+            # --- 役割とトーンの制御 (H4検証用) ---
             if tone_mode == "理解支援モード":
                 role_instruction = """
 あなたは調査者の思考を広げるパートナーです。
@@ -150,14 +150,15 @@ if 'data' in st.session_state:
 3. 想定される要因（正当な理由とリスクシナリオの両面）
 4. 推奨アクション
 """
+            # キャッシュのキーに _mode を追加して出し分けを可能にする
             @st.cache_data(show_spinner="AIがデータパターンを分析中...")
-            def get_ai_insight(_model, _prompt):
+            def get_ai_insight(_model, _prompt, _mode):
                 try:
                     return _model.generate_content(_prompt).text
                 except Exception as e:
                     return f"AI呼び出しエラー: {e}"
 
-            report_text = get_ai_insight(model, prompt)
+            report_text = get_ai_insight(model, prompt, tone_mode)
             st.markdown(report_text)
         else:
             st.info("有意な差がないため、AI分析は不要です。")
