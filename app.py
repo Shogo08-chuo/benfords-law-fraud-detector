@@ -18,7 +18,7 @@ else:
     st.error(f"⚠️ フォントファイル(ipaexg.ttf)が見つかりません。")
     jp_font_prop = None
 
-# --- 1. APIの設定 (モデル名の修正) ---
+# --- 1. APIの設定 ---
 if "GEMINI_API_KEY" in st.secrets:
     GENAI_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
@@ -29,9 +29,9 @@ else:
 def get_model(api_key):
     try:
         genai.configure(api_key=api_key)
-        # 404エラー回避のため、安定したモデル名に変更
+        # 404エラーを回避するため 'models/' プレフィックスを付与
         return genai.GenerativeModel(
-            model_name='gemini-1.5-flash', 
+            model_name='models/gemini-1.5-flash', 
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
         )
     except Exception as e:
@@ -40,13 +40,11 @@ def get_model(api_key):
 
 model = get_model(GENAI_API_KEY)
 
-# --- AI呼び出し関数 (キャッシュの引数から_を削除し、反映を確実にする) ---
+# キャッシュがプロンプトの変化（モード切替）を検知できるよう、_を外した引数(prompt_text)を設定
 @st.cache_data(show_spinner="AIがデータパターンを分析中...")
 def get_ai_insight(_model, prompt_text):
     try:
-        # モデルにプロンプトを送信
-        response = _model.generate_content(prompt_text)
-        return response.text
+        return _model.generate_content(prompt_text).text
     except Exception as e:
         return f"AI呼び出しエラー: {e}"
 
@@ -78,7 +76,7 @@ tone_mode = st.sidebar.radio(
     "AIの回答スタイル",
     ["理解支援モード", "断定モード"],
     index=0,
-    help="H4（信頼性評価）の検証用設定です。"
+    help="AIの伝え方が調査者の判断にどう影響するかを検証するための設定です。"
 )
 
 # --- 4. メイン解析ロジック ---
@@ -123,28 +121,27 @@ if 'data' in st.session_state:
     with tab2:
         st.subheader("AIによる統計的違和感の分析")
         if not enable_ai:
-            st.info("研究用設定により、現在AIレポートは非表示です。")
+            st.info("設定によりAIレポートは非表示です。")
         elif p_value < 0.05 and model:
             diffs = (observed_counts / total_count) - benford_ratios
             max_diff_digit = diffs.idxmax()
             
-            # --- 役割とトーンの制御 (修正版) ---
+            # モードに応じた指示の切り替え
             if tone_mode == "理解支援モード":
                 role_instruction = """
-あなたは、データから得られる多角的な視点を提示し、調査者の深い洞察を助ける「思考の伴走者」です。
+あなたは、調査者の洞察を深めるための「思考の伴走者」です。
 【重要ルール】
-- 統計的な乖離を「不正」や「異常」と断定しないでください。
-- 語尾は必ず「〜の可能性が考えられます」「〜という側面も否定できません」「〜といった仮説が立てられます」など、推論の形にしてください。
-- 業務上の正当な理由（単価設定やシステムの丸め処理など）による乖離の可能性を必ず示唆してください。
-- 判断の主体は常に調査者にあるというスタンスを徹底してください。
+- 統計的数値を「異常」や「不正」と断定しないでください。
+- 語尾は必ず「〜の可能性が考えられます」「〜という視点も存在します」「〜とも推測できます」といった推論の形にしてください。
+- 業務上の正当な理由（価格設定、端数処理、上限設定など）でこの分布が生じる可能性を必ず提示してください。
+- 最終的な判断は常にユーザーが行うよう、提案型の記述に徹してください。
 """
             else:
                 role_instruction = """
 あなたは厳しい会計監査人です。
 【重要ルール】
 - 統計的な異常を不正の兆候として強く警告してください。
-- 断定的な口調（「〜です」「〜であることは明らかです」）で指摘してください。
-- 他の可能性を排除し、結論を突きつけてください。
+- 断定的な口調（「〜です」「〜であることは明らかです」）で、結論を突きつけてください。
 """
 
             prompt = f"""
@@ -153,30 +150,28 @@ if 'data' in st.session_state:
 【分析データ】
 - 総件数: {total_count}
 - p値: {p_value:.10f}
-- 理論値から最も乖離している桁: {max_diff_digit}
+- 最も乖離している桁: {max_diff_digit}
 
-【レポート構成（以下の項目名を使用してください）】
-1. 統計的な観測事実
-2. 桁「{max_diff_digit}」の分布に関する考察
-3. 背景として推測されるシナリオ
-4. 次のステップへのヒント
+【レポート構成】
+1. 統計的傾向の確認（断定を避け、観測された事実を述べる）
+2. 桁「{max_diff_digit}」の突出に関する考察
+3. 想定される業務背景やシステム上の要因（正当な理由の仮説を含む）
+4. 今後の調査に向けた視点の提案
 """
-            # 引数にpromptを含めることで、内容変更を検知させる
+            # promptを引数に渡すことで、モード切替時にキャッシュが更新される
             report_text = get_ai_insight(model, prompt)
             st.markdown(report_text)
         else:
-            st.info("有意な差がないため、AI分析は不要です。")
+            st.info("有意な差（p < 0.05）が検出されなかったため、AI分析はスキップされました。")
 
     with tab3:
-        observed_counts_ratio = observed_counts / total_count
-        diffs = observed_counts_ratio - benford_ratios
-        max_diff_digit = diffs.idxmax()
-        st.subheader(f"重点調査対象：先頭桁が「{max_diff_digit}」のデータ")
-        valid_amounts_str = valid_amounts.astype(str)
-        is_suspicious = valid_amounts_str.str.lstrip("0.").str.startswith(str(max_diff_digit))
-        suspicious_df = df.loc[valid_amounts[is_suspicious].index]
-        st.write(f"該当件数: {len(suspicious_df)} 件")
-        st.dataframe(suspicious_df, use_container_width=True)
+        st.subheader(f"重点調査対象：先頭桁が「{max_diff_digit if 'max_diff_digit' in locals() else 'N/A'}」のデータ")
+        if 'max_diff_digit' in locals():
+            valid_amounts_str = valid_amounts.astype(str)
+            is_suspicious = valid_amounts_str.str.lstrip("0.").str.startswith(str(max_diff_digit))
+            suspicious_df = df.loc[valid_amounts[is_suspicious].index]
+            st.write(f"該当件数: {len(suspicious_df)} 件")
+            st.dataframe(suspicious_df, use_container_width=True)
         st.subheader("全ソースデータ")
         st.dataframe(df, use_container_width=True)
 else:
