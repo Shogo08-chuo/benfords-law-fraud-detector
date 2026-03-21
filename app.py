@@ -18,7 +18,7 @@ else:
     st.error(f"⚠️ フォントファイル(ipaexg.ttf)が見つかりません。")
     jp_font_prop = None
 
-# --- 1. APIの設定 ---
+# --- 1. APIの設定（以前の安定した記述に戻しました） ---
 if "GEMINI_API_KEY" in st.secrets:
     GENAI_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
@@ -29,8 +29,9 @@ else:
 def get_model(api_key):
     try:
         genai.configure(api_key=api_key)
+        # 以前のモデル名に戻しました
         return genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name='gemini-2.0-flash', 
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
         )
     except Exception as e:
@@ -117,16 +118,14 @@ if 'data' in st.session_state:
             diffs = (observed_counts / total_count) - benford_ratios
             max_diff_digit = diffs.idxmax()
             
-            # --- 役割とトーンの制御 ---
             if tone_mode == "理解支援モード":
                 role_instruction = """
-あなたは、データから得られる多角的な視点を提示し、調査者の深い洞察を助ける「思考の伴走者」です。
-以下のガイドラインを厳守してください：
-
-1. **断定の回避**: 統計的な乖離を「不正」や「異常」と決めつけないでください。あくまで「期待値からの外れ値」として扱います。
-2. **語尾の制御**: 「〜の可能性が考えられます」「〜という側面も否定できません」「〜といった仮説が立てられます」など、常に推論や提案の形をとってください。
-3. **代替案の提示**: 統計的な歪みが、業務プロセス上の特性（例：特定の単価設定、決済上限、端数処理のルールなど）によって「正当に生じている可能性」を必ず含めてください。
-4. **主体の委譲**: 「このデータは不自然です」ではなく、「この箇所を重点的に確認することで、より深い背景が見えてくるかもしれません」のように、判断の主体を常に調査者に置いてください。
+あなたは調査者の思考を広げるパートナーです。
+【重要ルール】
+- 統計的数値を「不正の証拠」や「異常」と断定しないでください。
+- 語尾は必ず「〜の可能性が考えられます」「〜という視点も存在します」「〜とも推測できます」といった推論の形にしてください。
+- 「判断されます」「示唆しています」「判明しました」といった確定的な表現は厳禁です。
+- 常に「一つの見方」であることを強調し、最終的な判断を調査者に委ねる態度を徹底してください。
 """
             else:
                 role_instruction = """
@@ -145,20 +144,22 @@ if 'data' in st.session_state:
 - p値: {p_value:.10f}
 - 理論値から最も乖離している桁: {max_diff_digit}
 
-【レポート構成（以下の項目名を使用し、疑問を投げかけるスタイルで書いてください）】
-1. 統計的な観測事実（「〜と判断されます」ではなく「〜という傾向が見て取れます」）
-2. 桁「{max_diff_digit}」の分布に関する考察
-3. 背景として推測されるシナリオ（業務特性やシステム仕様の可能性を提示）
-4. 次のステップへのヒント（調査者が確認すべき視点の提案）
+【レポート構成】
+1. 統計的結論
+2. 乖離の特徴（桁「{max_diff_digit}」の突出）
+3. 想定される要因（正当な理由とリスクシナリオの両面）
+4. 推奨アクション
 """
+            # キャッシュの出し分け設定を追加
             @st.cache_data(show_spinner="AIがデータパターンを分析中...")
-            def get_ai_insight(_model, _prompt):
+            def get_ai_insight(_model, _prompt, _mode):
                 try:
                     return _model.generate_content(_prompt).text
                 except Exception as e:
                     return f"AI呼び出しエラー: {e}"
 
-            report_text = get_ai_insight(model, prompt)
+            # tone_modeを引数に渡すことで、モード切替時にキャッシュが更新されるようにしました
+            report_text = get_ai_insight(model, prompt, tone_mode)
             st.markdown(report_text)
         else:
             st.info("有意な差がないため、AI分析は不要です。")
