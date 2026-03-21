@@ -7,7 +7,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import time
 import requests
 from datetime import datetime
-import plotly.graph_objects as go # ← 文字化けしない最新グラフライブラリを追加
+import plotly.graph_objects as go
 
 # ==========================================
 # 1. 初期設定とAIモデルの準備
