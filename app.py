@@ -29,7 +29,6 @@ else:
 def get_model(api_key):
     try:
         genai.configure(api_key=api_key)
-        # 安定性を考慮し 1.5-flash-latest を使用
         return genai.GenerativeModel(
             model_name='gemini-1.5-flash-latest',
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
@@ -61,10 +60,9 @@ if st.sidebar.button("🧪 デモ用データをロード"):
 if uploaded_file:
     st.session_state['data'] = pd.read_csv(uploaded_file)
 
-# --- 【新規追加】実験用スイッチ (H1-H4検証用) ---
 st.sidebar.markdown("---")
 st.sidebar.header("研究用設定")
-enable_ai = st.sidebar.toggle("AI分析レポートを表示", value=True) # H1/H2/H3用
+enable_ai = st.sidebar.toggle("AI分析レポートを表示", value=True)
 tone_mode = st.sidebar.radio(
     "AIの回答スタイル",
     ["理解支援モード", "断定モード"],
@@ -113,18 +111,30 @@ if 'data' in st.session_state:
 
     with tab2:
         st.subheader("AIによる統計的違和感の分析")
-        # 1. AI表示スイッチの判定
         if not enable_ai:
             st.info("研究用設定により、現在AIレポートは非表示です。")
         elif p_value < 0.05 and model:
             diffs = (observed_counts / total_count) - benford_ratios
             max_diff_digit = diffs.idxmax()
             
-            # 2. ロールとトーンの固定 (H4検証用)
+            # --- 役割とトーンの制御 ---
             if tone_mode == "理解支援モード":
-                role_instruction = "あなたは調査者の思考を広げるパートナーです。統計的数値を不正の証拠として断定せず、業務上の自然な理由とリスクの両面から仮説を提示してください。語尾は「〜の可能性があります」「〜という視点が考えられます」としてください。"
+                role_instruction = """
+あなたは調査者の思考を広げるパートナーです。
+【重要ルール】
+- 統計的数値を「不正の証拠」や「異常」と断定しないでください。
+- 語尾は必ず「〜の可能性が考えられます」「〜という視点も存在します」「〜とも推測できます」といった推論の形にしてください。
+- 「判断されます」「示唆しています」「判明しました」といった確定的な表現は厳禁です。
+- 常に「一つの見方」であることを強調し、最終的な判断を調査者に委ねる態度を徹底してください。
+"""
             else:
-                role_instruction = "あなたは厳しい会計監査人です。統計的な異常を不正の兆候として強く警告してください。他の可能性を考慮せず、不正のリスクを断定的な口調で指摘してください。語尾は「〜です」「〜と言い切れます」としてください。"
+                role_instruction = """
+あなたは厳しい会計監査人です。
+【重要ルール】
+- 統計的な異常を不正の兆候として強く警告してください。
+- 他の可能性を排除し、断定的な口調（「〜です」「〜であることは明らかです」）で指摘してください。
+- 調査者に考える余地を与えず、結論を突きつけてください。
+"""
 
             prompt = f"""
 {role_instruction}
