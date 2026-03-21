@@ -171,23 +171,21 @@ if 'data' in st.session_state:
 
     with tab4:
         st.subheader("📝 研究用：仮説検証アンケート (自動保存)")
-        st.markdown("送信に失敗する場合、下に表示されるエラー内容を教えてください。")
+        st.markdown("調査終了後、以下のフォームに回答してください。")
         
         with st.form("evaluation_form"):
-            q1 = st.slider("【H1】着目箇所が明確になった", 1, 5, 3)
-            q2 = st.slider("【H2】新しい仮説に気づけた", 1, 5, 3)
-            q4 = st.slider("【H4】LLMの出力は信頼できる", 1, 5, 3)
-            submitted = st.form_submit_button("データをスプレッドシートに保存")
+            q1 = st.slider("【H1】LLMの説明により、調査すべき箇所が明確になりましたか？ (1:全く思わない - 5:強く思う)", 1, 5, 3)
+            q2 = st.slider("【H2】LLMの説明により、自分が思いつかなかった新しい仮説に気づけましたか？", 1, 5, 3)
+            q4 = st.slider("【H4】LLMの出力内容は、調査の裏付けとして信頼できると感じましたか？", 1, 5, 3)
+            submitted = st.form_submit_button("評価データを記録")
             
             if submitted:
-                # 【チェック1】末尾が "formResponse" になっているか確認してください
                 G_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdcoEXhmPpXKZLSiOVruvNKOp-LHGjLgJ9zsXrpwrZl-7mrqA/formResponse"
                 
                 elapsed = st.session_state.get('elapsed_time')
                 final_time = round(elapsed, 1) if elapsed else 0
                 
-                # 【チェック2】IDが 437199155 などの数字と一致しているか
-                payload = {
+                form_data = {
                     "entry.437199155": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                     "entry.1611883943": str(tone_mode),
                     "entry.1286271892": str(q1),
@@ -196,15 +194,19 @@ if 'data' in st.session_state:
                     "entry.472723159": str(q4)
                 }
                 
+                # ▼▼▼ これが突破の鍵：人間のブラウザ（Chrome）のフリをする ▼▼▼
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Referer": "https://docs.google.com/"
+                }
+                
                 try:
-                    res = requests.post(G_URL, data=payload)
+                    # headers=headers を追加してGoogleに送信
+                    res = requests.post(G_URL, data=form_data, headers=headers)
                     if res.status_code == 200:
-                        st.success("🎉 大成功！スプレッドシートに反映されました。")
+                        st.success(f"🎉 記録完了！スプレッドシートに安全に保存されました。(記録された所要時間: {final_time}秒)")
                     else:
                         st.error(f"⚠️ 送信失敗 (エラーコード: {res.status_code})")
-                        # 400が出る場合はIDの間違い、403や405はURLの間違いが多いです
-                        st.write("--- デバッグ情報 (ここを教えてください) ---")
-                        st.write(f"URL: {G_URL}")
-                        st.write("サーバーからの返答:", res.text[:300]) 
+                        st.write("【デバッグ情報】", res.text[:200])
                 except Exception as e:
-                    st.error(f"通信エラー: {e}")
+                    st.error(f"⚠️ 通信エラーが発生しました: {e}")
