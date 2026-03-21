@@ -30,7 +30,7 @@ def get_model(api_key):
     try:
         genai.configure(api_key=api_key)
         return genai.GenerativeModel(
-            model_name='gemini-2.0-flash', # 実務・実験での速度を考慮し2.0 flashを推奨
+            model_name='gemini-1.5-flash', # 実務・実験での速度を考慮し2.0 flashを推奨
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
         )
     except Exception as e:
