@@ -58,6 +58,19 @@ st.title("📊 会計データ：意味理解支援フレームワーク")
 
 st.sidebar.header("📁 1. データ設定")
 uploaded_file = st.sidebar.file_uploader("CSVアップロード", type="csv")
+if uploaded_file is not None:
+    try:
+        # アップロードされたCSVを読み込んでセッションに保存
+        user_df = pd.read_csv(uploaded_file)
+        # 列名に "amount" が含まれているか確認（なければ最初の列を使うなどの工夫）
+        if "amount" not in user_df.columns:
+            # 1列目を強制的に amount として扱う（利便性のため）
+            user_df = user_df.rename(columns={user_df.columns[0]: "amount"})
+        
+        st.session_state['data'] = user_df
+        st.sidebar.success("✅ ファイルを読み込みました")
+    except Exception as e:
+        st.sidebar.error(f"読み込みエラー: {e}")
 if st.sidebar.button("🧪 デモデータ生成"):
     np.random.seed(42)
     data = np.concatenate([10**np.random.uniform(2, 5, 2000), np.random.choice([900, 950, 990], 300)])
