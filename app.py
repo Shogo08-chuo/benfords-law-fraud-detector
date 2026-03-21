@@ -20,14 +20,11 @@ else:
 
 @st.cache_resource
 def get_model(api_key):
-    """利用可能な最新のGeminiモデルを自動検索して初期化する"""
     try:
         genai.configure(api_key=api_key)
-        # 使えるモデル一覧を取得し、2.5-flash または 1.5-flash を優先
         models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         target = next((m for m in models if "2.5-flash" in m), None) or \
                  next((m for m in models if "1.5-flash" in m), models[0])
-        
         return genai.GenerativeModel(
             model_name=target, 
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
@@ -40,7 +37,6 @@ model = get_model(GENAI_API_KEY)
 
 @st.cache_data(show_spinner="LLMが解釈支援レポートを生成中...")
 def get_ai_insight(_model, prompt_text):
-    """プロンプト(prompt_text)が変わるたびにAIを再実行する"""
     try:
         return _model.generate_content(prompt_text).text
     except Exception as e:
@@ -63,13 +59,11 @@ st.title("📊 会計データ：意味理解支援フレームワーク")
 st.sidebar.header("📁 1. データ設定")
 uploaded_file = st.sidebar.file_uploader("CSVアップロード", type="csv")
 if st.sidebar.button("🧪 デモデータ生成"):
-    # 意図的に「9」で始まるデータを少し多めに混入させる
     np.random.seed(42)
     data = np.concatenate([10**np.random.uniform(2, 5, 2000), np.random.choice([900, 950, 990], 300)])
     st.session_state['data'] = pd.DataFrame({"amount": data})
 
 st.sidebar.header("⚙️ 2. 実験条件 (H4検証用)")
-# ここを切り替えると prompt_text が変わり、AIの回答が再生成される
 tone_mode = st.sidebar.radio("LLMの提示スタイル", ["理解支援モード (提案型)", "断定モード (警告型)"])
 
 st.sidebar.header("⏱️ 3. 調査計測 (H3検証用)")
@@ -82,9 +76,8 @@ if st.sidebar.button("⏹️ 調査終了"):
         st.session_state['elapsed_time'] = time.time() - st.session_state['start_time']
         st.session_state['start_time'] = None
 
-# タイマーの状態表示
 if st.session_state['start_time']:
-    st.sidebar.warning("⏳ 調査実行中... (終了ボタンを押すまで計測します)")
+    st.sidebar.warning("⏳ 調査実行中...")
 elif st.session_state['elapsed_time']:
     st.sidebar.success(f"✅ 調査完了: {st.session_state['elapsed_time']:.1f} 秒")
 
@@ -93,7 +86,6 @@ elif st.session_state['elapsed_time']:
 # ==========================================
 if 'data' in st.session_state:
     df = st.session_state['data']
-    # 金額データのクリーニングと先頭桁の抽出
     amounts = pd.to_numeric(df["amount"], errors='coerce').dropna()
     amounts = amounts[amounts > 0]
     first_digits = amounts.astype(str).str.lstrip("0.").str[0].astype(int)
@@ -128,7 +120,6 @@ if 'data' in st.session_state:
         if p_val < 0.05 and model:
             max_digit = ((obs/total) - exp_ratios).idxmax()
             
-            # --- 研究の核心：理解支援か断定かの切り替え ---
             if tone_mode == "理解支援モード (提案型)":
                 instr = """あなたは調査者の判断を支援する「思考の伴走者」です。
                 【厳守事項】
@@ -171,7 +162,7 @@ if 'data' in st.session_state:
 
     with tab4:
         st.subheader("📝 研究用：仮説検証アンケート (自動保存)")
-        st.markdown("調査終了後、以下のフォームに回答してください。")
+        st.markdown("調査終了後、以下のフォームに回答してください。データはスプレッドシートに直接保存されます。")
         
         with st.form("evaluation_form"):
             q1 = st.slider("【H1】LLMの説明により、調査すべき箇所が明確になりましたか？ (1:全く思わない - 5:強く思う)", 1, 5, 3)
@@ -180,33 +171,32 @@ if 'data' in st.session_state:
             submitted = st.form_submit_button("評価データを記録")
             
             if submitted:
-                G_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdcoEXhmPpXKZLSiOVruvNKOp-LHGjLgJ9zsXrpwrZl-7mrqA/formResponse"
+                # 取得していただいた専用APIのURL
+                GAS_URL = "https://script.google.com/macros/s/AKfycbzm0u7NwHeMlHNJ7dP2XgMBx8ZnQVyTI1nHuhB2Zoiibcf63tjCD7ojxbuC-v-ZIij7WQ/exec"
                 
                 elapsed = st.session_state.get('elapsed_time')
                 final_time = round(elapsed, 1) if elapsed else 0
                 
-                form_data = {
-                    "entry.437199155": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                    "entry.1611883943": str(tone_mode),
-                    "entry.1286271892": str(q1),
-                    "entry.1797515403": str(q2),
-                    "entry.690738940": str(final_time),
-                    "entry.472723159": str(q4)
-                }
-                
-                # ▼▼▼ これが突破の鍵：人間のブラウザ（Chrome）のフリをする ▼▼▼
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    "Referer": "https://docs.google.com/"
+                # Apps Script側で設定した変数名（date, style, q1, q2, time, q4）と完全に一致させます
+                payload = {
+                    "date": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                    "style": str(tone_mode),
+                    "q1": str(q1),
+                    "q2": str(q2),
+                    "time": str(final_time),
+                    "q4": str(q4)
                 }
                 
                 try:
-                    # headers=headers を追加してGoogleに送信
-                    res = requests.post(G_URL, data=form_data, headers=headers)
-                    if res.status_code == 200:
-                        st.success(f"🎉 記録完了！スプレッドシートに安全に保存されました。(記録された所要時間: {final_time}秒)")
+                    # Google Formの面倒な仕様を避けて、APIへ直接送信
+                    response = requests.post(GAS_URL, data=payload)
+                    
+                    if response.status_code == 200 and "Success" in response.text:
+                        st.success(f"🎉 記録大成功！スプレッドシートにデータが書き込まれました。(所要時間: {final_time}秒)")
+                        st.balloons() # 成功のお祝いアニメーション
                     else:
-                        st.error(f"⚠️ 送信失敗 (エラーコード: {res.status_code})")
-                        st.write("【デバッグ情報】", res.text[:200])
+                        st.error(f"⚠️ 送信に失敗しました。ステータス: {response.status_code}")
                 except Exception as e:
                     st.error(f"⚠️ 通信エラーが発生しました: {e}")
+else:
+    st.info("👈 サイドバーからCSVをアップロードするか、デモデータを生成してください。")
