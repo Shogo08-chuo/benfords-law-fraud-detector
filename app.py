@@ -18,7 +18,7 @@ else:
     st.error(f"⚠️ フォントファイル(ipaexg.ttf)が見つかりません。")
     jp_font_prop = None
 
-# --- 1. APIの設定 ---
+# --- 1. APIの設定（以前の安定した記述に戻しました） ---
 if "GEMINI_API_KEY" in st.secrets:
     GENAI_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
@@ -29,8 +29,9 @@ else:
 def get_model(api_key):
     try:
         genai.configure(api_key=api_key)
+        # 以前のモデル名に戻しました
         return genai.GenerativeModel(
-            model_name='gemini-1.5-flash-latest',
+            model_name='gemini-2.0-flash', 
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
         )
     except Exception as e:
@@ -117,7 +118,6 @@ if 'data' in st.session_state:
             diffs = (observed_counts / total_count) - benford_ratios
             max_diff_digit = diffs.idxmax()
             
-            # --- 役割とトーンの制御 (H4検証用) ---
             if tone_mode == "理解支援モード":
                 role_instruction = """
 あなたは調査者の思考を広げるパートナーです。
@@ -150,7 +150,7 @@ if 'data' in st.session_state:
 3. 想定される要因（正当な理由とリスクシナリオの両面）
 4. 推奨アクション
 """
-            # キャッシュのキーに _mode を追加して出し分けを可能にする
+            # キャッシュの出し分け設定を追加
             @st.cache_data(show_spinner="AIがデータパターンを分析中...")
             def get_ai_insight(_model, _prompt, _mode):
                 try:
@@ -158,6 +158,7 @@ if 'data' in st.session_state:
                 except Exception as e:
                     return f"AI呼び出しエラー: {e}"
 
+            # tone_modeを引数に渡すことで、モード切替時にキャッシュが更新されるようにしました
             report_text = get_ai_insight(model, prompt, tone_mode)
             st.markdown(report_text)
         else:
