@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.stats import chisquare
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import time
 import requests
 from datetime import datetime
+import plotly.graph_objects as go # ← 文字化けしない最新グラフライブラリを追加
 
 # ==========================================
 # 1. 初期設定とAIモデルの準備
@@ -107,13 +107,24 @@ if 'data' in st.session_state:
         st.markdown("不正の判定は行わず、純粋な統計的乖離のみを可視化します。")
         st.metric("p-value (有意水準0.05)", f"{p_val:.10f}")
         
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.bar(range(1, 10), obs/total, alpha=0.5, label="観測値 (実際のデータ)", color="#1f77b4")
-        ax.plot(range(1, 10), exp_ratios, 'ro-', label="理論値 (ベンフォードの法則)", linewidth=2)
-        ax.set_xlabel("先頭桁 (Leading Digit)")
-        ax.set_ylabel("出現確率")
-        ax.legend()
-        st.pyplot(fig)
+        # --- Plotlyによる文字化けしない美しいグラフ ---
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=list(range(1, 10)), y=obs/total,
+            name="観測値 (実際のデータ)", marker_color="#1f77b4", opacity=0.6
+        ))
+        fig.add_trace(go.Scatter(
+            x=list(range(1, 10)), y=exp_ratios,
+            mode="lines+markers", name="理論値 (ベンフォードの法則)",
+            line=dict(color="red", width=2), marker=dict(size=8)
+        ))
+        fig.update_layout(
+            xaxis_title="先頭桁 (Leading Digit)", yaxis_title="出現確率",
+            xaxis=dict(tickmode='linear'), hovermode="x unified",
+            margin=dict(l=0, r=0, t=30, b=0),
+            legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99)
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
         st.subheader("第二段階：LLMによる意味理解支援")
@@ -171,13 +182,11 @@ if 'data' in st.session_state:
             submitted = st.form_submit_button("評価データを記録")
             
             if submitted:
-                # 取得していただいた専用APIのURL
                 GAS_URL = "https://script.google.com/macros/s/AKfycbzm0u7NwHeMlHNJ7dP2XgMBx8ZnQVyTI1nHuhB2Zoiibcf63tjCD7ojxbuC-v-ZIij7WQ/exec"
                 
                 elapsed = st.session_state.get('elapsed_time')
                 final_time = round(elapsed, 1) if elapsed else 0
                 
-                # Apps Script側で設定した変数名（date, style, q1, q2, time, q4）と完全に一致させます
                 payload = {
                     "date": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                     "style": str(tone_mode),
@@ -188,12 +197,10 @@ if 'data' in st.session_state:
                 }
                 
                 try:
-                    # Google Formの面倒な仕様を避けて、APIへ直接送信
                     response = requests.post(GAS_URL, data=payload)
-                    
                     if response.status_code == 200 and "Success" in response.text:
                         st.success(f"🎉 記録大成功！スプレッドシートにデータが書き込まれました。(所要時間: {final_time}秒)")
-                        st.balloons() # 成功のお祝いアニメーション
+                        st.balloons()
                     else:
                         st.error(f"⚠️ 送信に失敗しました。ステータス: {response.status_code}")
                 except Exception as e:
