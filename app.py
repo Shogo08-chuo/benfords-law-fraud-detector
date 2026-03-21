@@ -30,7 +30,7 @@ def get_model(api_key):
     try:
         genai.configure(api_key=api_key)
         return genai.GenerativeModel(
-            model_name='gemini-1.5-flash-latest',
+            model_name='gemini-1.5-flash',
             safety_settings={HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE}
         )
     except Exception as e:
