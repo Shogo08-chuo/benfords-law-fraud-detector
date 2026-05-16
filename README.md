@@ -154,44 +154,6 @@ Streamlit SecretsにGemini APIキーを設定します。
 GEMINI_API_KEY = "your_api_key"
 ```
 
-### 2-1. Google Apps Script の送信先URL設定
-
-評価フォームの送信先URLも、Streamlit Secretsまたは環境変数で設定します。
-
-```toml
-GAS_URL = "https://script.google.com/macros/s/your_deployed_script/exec"
-```
-
-このURLは、Google Apps Script を新しく作り直した場合に差し替えるだけで使えます。
-
-### 2-2. 最小のGoogle Apps Script例
-
-新しいスプレッドシートに紐づくApps Scriptを作り、以下のような `doPost` を用意します。
-
-```javascript
-function doGet(e) {
-  return ContentService.createTextOutput("POST only endpoint");
-}
-
-function doPost(e) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
-  sheet.appendRow([
-    e.parameter.date,
-    e.parameter.style,
-    e.parameter.q1,
-    e.parameter.q2,
-    e.parameter.time,
-    e.parameter.q4,
-  ]);
-
-  return ContentService
-    .createTextOutput("Success")
-    .setMimeType(ContentService.MimeType.TEXT);
-}
-```
-
-必要に応じて、`Sheet1` は実際のシート名に合わせて変更してください。
-
 ### 3. アプリの起動
 
 ```bash
