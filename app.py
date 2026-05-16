@@ -4,6 +4,7 @@ import numpy as np
 from scipy.stats import chisquare
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import os
 import time
 import requests
 from datetime import datetime
@@ -41,6 +42,10 @@ def get_ai_insight(_model, prompt_text):
         return _model.generate_content(prompt_text).text
     except Exception as e:
         return f"AI呼び出しエラーが発生しました: {e}"
+
+
+def get_gas_url():
+    return st.secrets.get("GAS_URL") or os.getenv("GAS_URL")
 
 # ==========================================
 # 2. セッション状態（タイマー機能）の初期化
@@ -186,7 +191,7 @@ if 'data' in st.session_state:
 
     with tab4:
         st.subheader("📝 研究用：仮説検証アンケート (自動保存)")
-        st.markdown("調査終了後、以下のフォームに回答してください。データはスプレッドシートに直接保存されます。")
+        st.markdown("調査終了後、以下のフォームに回答してください。データはGoogle Apps Script経由でスプレッドシートに保存されます。")
         
         with st.form("evaluation_form"):
             q1 = st.slider("【H1】LLMの説明により、調査すべき箇所が明確になりましたか？ (1:全く思わない - 5:強く思う)", 1, 5, 3)
@@ -195,28 +200,32 @@ if 'data' in st.session_state:
             submitted = st.form_submit_button("評価データを記録")
             
             if submitted:
-                GAS_URL = "https://script.google.com/macros/s/AKfycbzm0u7NwHeMlHNJ7dP2XgMBx8ZnQVyTI1nHuhB2Zoiibcf63tjCD7ojxbuC-v-ZIij7WQ/exec"
-                
-                elapsed = st.session_state.get('elapsed_time')
-                final_time = round(elapsed, 1) if elapsed else 0
-                
-                payload = {
-                    "date": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                    "style": str(tone_mode),
-                    "q1": str(q1),
-                    "q2": str(q2),
-                    "time": str(final_time),
-                    "q4": str(q4)
-                }
-                
-                try:
-                    response = requests.post(GAS_URL, data=payload)
-                    if response.status_code == 200 and "Success" in response.text:
-                        st.success(f"🎉 記録大成功！スプレッドシートにデータが書き込まれました。(所要時間: {final_time}秒)")
-                        st.balloons()
-                    else:
-                        st.error(f"⚠️ 送信に失敗しました。ステータス: {response.status_code}")
-                except Exception as e:
-                    st.error(f"⚠️ 通信エラーが発生しました: {e}")
+                GAS_URL = get_gas_url()
+
+                if not GAS_URL:
+                    st.error("⚠️ 送信先URLが未設定です。Streamlit Secrets か環境変数 `GAS_URL` を設定してください。")
+                else:
+                    elapsed = st.session_state.get('elapsed_time')
+                    final_time = round(elapsed, 1) if elapsed else 0
+
+                    payload = {
+                        "date": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                        "style": str(tone_mode),
+                        "q1": str(q1),
+                        "q2": str(q2),
+                        "time": str(final_time),
+                        "q4": str(q4)
+                    }
+
+                    try:
+                        response = requests.post(GAS_URL, data=payload, timeout=15)
+                        if response.status_code == 200 and "Success" in response.text:
+                            st.success(f"🎉 記録大成功！スプレッドシートにデータが書き込まれました。(所要時間: {final_time}秒)")
+                            st.balloons()
+                        else:
+                            st.error(f"⚠️ 送信に失敗しました。ステータス: {response.status_code}")
+                            st.caption(f"応答本文: {response.text[:300]}")
+                    except Exception as e:
+                        st.error(f"⚠️ 通信エラーが発生しました: {e}")
 else:
     st.info("👈 サイドバーからCSVをアップロードするか、デモデータを生成してください。")
