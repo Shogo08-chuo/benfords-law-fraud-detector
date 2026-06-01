@@ -154,7 +154,19 @@ Streamlit SecretsにGemini APIキーを設定します。
 GEMINI_API_KEY = "your_api_key"
 ```
 
-### 3. アプリの起動
+### 3. Google Apps Script の設定
+
+`gas/Code.gs` を Google Apps Script に貼り付けて、対象スプレッドシートに紐づけます。
+
+1. Googleスプレッドシートを開く
+2. `拡張機能 > Apps Script` を開く
+3. `gas/Code.gs` の内容を貼り付ける
+4. `デプロイ > 新しいデプロイ` を選ぶ
+5. 種類で `ウェブアプリ` を選ぶ
+6. 実行कर्ताを自分、アクセスを `全員` または `リンクを知っている全員` にする
+7. 発行された `https://script.google.com/macros/s/.../exec` を `GAS_URL` に設定する
+
+### 4. アプリの起動
 
 ```bash
 streamlit run app.py
