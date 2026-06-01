@@ -82,7 +82,15 @@ if st.sidebar.button("🧪 デモデータ生成"):
     st.session_state['data'] = pd.DataFrame({"amount": data})
 
 st.sidebar.header("⚙️ 2. 実験条件 (H4検証用)")
-tone_mode = st.sidebar.radio("LLMの提示スタイル", ["理解支援モード (提案型)", "断定モード (警告型)"])
+tone_mode = st.sidebar.radio(
+    "LLMの提示スタイル",
+    ["理解支援モード (提案型)", "断定モード (警告型)"],
+    index=None,
+)
+if tone_mode is None:
+    st.sidebar.caption("未選択")
+else:
+    st.sidebar.success(f"選択中: {tone_mode}")
 
 st.sidebar.header("⏱️ 3. 調査計測 (H3検証用)")
 if st.sidebar.button("▶️ 調査開始"):
@@ -146,7 +154,9 @@ if 'data' in st.session_state:
 
     with tab2:
         st.subheader("第二段階：LLMによる意味理解支援")
-        if p_val < 0.05 and model:
+        if tone_mode is None:
+            st.info("サイドバーでLLMの提示スタイルを選択すると、ここに説明が表示されます。")
+        elif p_val < 0.05 and model:
             max_digit = ((obs/total) - exp_ratios).idxmax()
             
             if tone_mode == "理解支援モード (提案型)":
@@ -200,6 +210,10 @@ if 'data' in st.session_state:
             submitted = st.form_submit_button("評価データを記録")
             
             if submitted:
+                if tone_mode is None:
+                    st.error("⚠️ 先にLLMの提示スタイルを選択してください。")
+                    st.stop()
+
                 GAS_URL = get_gas_url()
 
                 if not GAS_URL:
